@@ -7,7 +7,7 @@ main.exe: main.c OpenCAN_api.c
 	$(CC) -o $@ main.c OpenCAN_api.c -I.
 
 OpenCAN_api.o: OpenCAN_api.c
-	$(CC) -Wall -c $^
+	$(CC) -m32 -Wall -c $^
 
 # Generate the static library!
 lib: OpenCAN_api.c OpenCAN_api.o
