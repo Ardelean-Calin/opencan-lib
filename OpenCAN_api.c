@@ -42,7 +42,7 @@ void OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg){
     // Address upper byte
     rawMsg[2] = txMsg->msgID >> 4;
     // Address lower 3 bits and DLC
-    rawMsg[3] = ((txMsg->msgID & 0b00000000111) << 4) + txMsg->DLC;
+    rawMsg[3] = ((txMsg->msgID & 0b00000001111) << 4) + txMsg->DLC;
     // Copy data buffer in preparation for send
     memcpy((void*) &rawMsg[4], txMsg->Data, 8);
 
