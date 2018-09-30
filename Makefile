@@ -13,7 +13,7 @@ endif
 all: clean main.exe lib
 
 main.exe: main.c OpenCAN_api.c
-	$(CC) -o $@ main.c OpenCAN_api.c -I. $(CFLAGS)
+	$(CC) -o $@ main.c OpenCAN_api.c cobs.c -I. $(CFLAGS)
 
 OpenCAN_api.o: OpenCAN_api.c
 	$(CC) -m32 -Wall -c $^

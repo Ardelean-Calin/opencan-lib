@@ -1,5 +1,36 @@
+#include "cobs.h"
 #include "OpenCAN_api.h"
 #include <stdio.h>
+#include <stdint.h>
+#include <stddef.h>
+
+/** 
+ * Orders the data in the circular buffer.
+ */
+static void vExtractDataCircularBuffer(uint8_t *src, uint8_t *dst, uint8_t i, uint8_t len)
+{
+    uint8_t upperBytesNo = len - 1 - i;
+    memcpy(dst, &src[i + 1], upperBytesNo);
+    memcpy(&dst[upperBytesNo], src, i + 1);
+}
+
+static void vBuildCANFrameFromData(uint8_t *data, CANMsg_Standard_t *msg)
+{
+    // Create the CAN message from the received data
+    memcpy(msg->Data, &data[2], 8U);
+    msg->DLC = data[0] >> 4;
+    msg->msgID = ((data[0] & 0x0F) << 8) + data[1];
+}
+
+// Returns the number of bytes written
+static uint8_t OpenCAN_Write(HANDLE hComm, uint8_t *Buf, uint8_t Len)
+{
+    DWORD bytesWritten;
+    if (WriteFile(hComm, (void *)Buf, (DWORD)Len, &bytesWritten, NULL))
+        return (uint8_t)bytesWritten;
+    else
+        return 0;
+}
 
 void *OpenCAN_Open(char *portName)
 {
@@ -33,34 +64,26 @@ void OpenCAN_Close(HANDLE hComm)
     CloseHandle(hComm);
 }
 
-// Returns the number of bytes written
-uint8_t OpenCAN_Write(HANDLE hComm, uint8_t *Buf, uint8_t Len)
-{
-    DWORD bytesWritten;
-    if (WriteFile(hComm, (void *)Buf, (DWORD)Len, &bytesWritten, NULL))
-        return (uint8_t)bytesWritten;
-    else
-        return 0;
-}
-
 void OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
 {
-    uint8_t rawMsg[TX_MSG_RAW_SIZE];
-
-    // Set start and end bytes
-    rawMsg[0] = TX_MSG_START_BYTE;
-    rawMsg[TX_MSG_RAW_SIZE - 1] = TX_MSG_END_BYTE;
+    uint8_t rawMsg[TX_MSG_DEC_SIZE];
+    uint8_t encodedMsg[TX_MSG_ENC_SIZE];
 
     // Command to execute on the OpenCAN
-    rawMsg[1] = CAN_WRITE_MSG;
+    rawMsg[0] = CAN_WRITE_MSG;
+    // TODO: Change DLC and MSGID to be same format as receive
     // Address upper byte
-    rawMsg[2] = txMsg->msgID >> 4;
+    rawMsg[1] = txMsg->msgID >> 4;
     // Address lower 3 bits and DLC
-    rawMsg[3] = ((txMsg->msgID & 0b00000001111) << 4) + txMsg->DLC;
+    rawMsg[2] = ((txMsg->msgID & 0b00000001111) << 4) + txMsg->DLC;
     // Copy data buffer in preparation for send
-    memcpy((void *)&rawMsg[4], txMsg->Data, 8);
+    memcpy((void *)&rawMsg[3], txMsg->Data, 8);
 
-    OpenCAN_Write(hComm, (uint8_t *)&rawMsg, TX_MSG_RAW_SIZE);
+    // Encode data using COBS
+    StuffData(rawMsg, TX_MSG_DEC_SIZE, encodedMsg);
+    encodedMsg[TX_MSG_ENC_SIZE - 1] = 0x00;
+
+    OpenCAN_Write(hComm, (uint8_t *)encodedMsg, TX_MSG_ENC_SIZE);
 }
 
 /**
@@ -69,28 +92,28 @@ void OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
  */
 uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
 {
-    uint8_t buffer[RX_MSG_RAW_SIZE];
+    uint8_t ucReadResult = 0U;
+    uint8_t ucBufferIndex = 0U;
+    uint8_t pucCircularBuffer[RX_MSG_ENC_SIZE];
+    uint8_t pucEncodedData[RX_MSG_ENC_SIZE];
+    uint8_t pucDecodedData[RX_MSG_DEC_SIZE];
 
-    uint8_t result = ReadFile(hComm, &buffer[0], RX_MSG_RAW_SIZE, NULL, NULL);
-
-    if (result)
+    // Infinite loop: read bytes until EOF (0x00)
+    for (;;)
     {
-        if ((buffer[0] != RX_MSG_START_BYTE) || (buffer[RX_MSG_RAW_SIZE - 1] != RX_MSG_END_BYTE))
-        {
-            // Flush the serial buffer since message is wrong. We lost one here.
-            PurgeComm(hComm, PURGE_RXCLEAR | PURGE_RXABORT);
+        ucReadResult = ReadFile(hComm, &pucCircularBuffer[ucBufferIndex], 1U, NULL, NULL);
+        if (!ucReadResult)
             return 1U;
+
+        if (pucCircularBuffer[ucBufferIndex] == 0U)
+        {
+            // We got the EOF character; Decode COBS frame and build CAN frame
+            vExtractDataCircularBuffer(pucCircularBuffer, pucEncodedData, ucBufferIndex, RX_MSG_ENC_SIZE);
+            UnStuffData(pucEncodedData, RX_MSG_ENC_SIZE, pucDecodedData);
+            vBuildCANFrameFromData(pucDecodedData, rxMsg);
+            return 0U;
         }
 
-        // Create the CAN message from the received data
-        memcpy(rxMsg->Data, &buffer[3], 8U);
-        rxMsg->DLC = buffer[1] >> 4;
-        rxMsg->msgID = ((buffer[1] & 0x0F) << 8) + buffer[2];
-
-        return 0U;
-    }
-    else
-    {
-        return 1U;
+        ucBufferIndex = (ucBufferIndex + 1) % RX_MSG_ENC_SIZE;
     }
 }

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "OpenCAN_api.h"
 
-const char data[] = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
+const char data[] = {0x41, 0x00, 0x43, 0x44, 0x00, 0x00, 0x47, 0x48};
 
 int main()
 {
@@ -27,17 +27,11 @@ int main()
     OpenCAN_WriteCAN(hComm, &txCanMsg);
     uint8_t error = OpenCAN_ReadCAN(hComm, &rxCanMsg);
 
-    if (error)
-    {
-        printf("Error reading from OpenCAN.");
-        return -1;
-    }
-
-    printf("Received message:\n  ID: %x; DLC:%x; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
+    printf("Received message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
 
     for (int i = 0; i < 8; i++)
     {
-        printf("%x ", rxCanMsg.Data[i]);
+        printf("%02x ", rxCanMsg.Data[i]);
     }
 
     printf("\nClosing serial port");
