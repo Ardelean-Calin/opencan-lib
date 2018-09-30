@@ -14,6 +14,7 @@ void *OpenCAN_Open(char *portName)
 
     // Set a 10ms timeout between bytes and make the read function blocking.
     // Will transmission work while waiting for receive? TODO
+    // TODO: Maybe I also need a transmit timeout?
     COMMTIMEOUTS commTimeouts;
     GetCommTimeouts(hComm, &commTimeouts);
     commTimeouts.ReadIntervalTimeout = 10;            // More than 10ms between bytes is a timeout
@@ -66,11 +67,25 @@ void OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
  * The simplest possible Serial Read function. May need to adapt to be able to
  * read while transmitting & not read transmitted bytes.
  */
-uint8_t OpenCAN_ReadCAN(HANDLE hComm, uint8_t *readBuffer)
+uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
 {
-    uint8_t result = ReadFile(hComm, readBuffer, RX_MSG_RAW_SIZE, NULL, NULL);
+    uint8_t buffer[RX_MSG_RAW_SIZE];
+
+    uint8_t result = ReadFile(hComm, &buffer[0], RX_MSG_RAW_SIZE, NULL, NULL);
+
     if (result)
     {
+        if ((buffer[0] != RX_MSG_START_BYTE) && (buffer[RX_MSG_RAW_SIZE - 1] != RX_MSG_END_BYTE))
+        {
+            // TODO: Flush the serial buffer since message is wrong. We lost one here.
+            return 1U;
+        }
+
+        // Create the CAN message from the received data
+        memcpy(rxMsg->Data, &buffer[3], 8U);
+        rxMsg->DLC = buffer[1] >> 4;
+        rxMsg->msgID = ((buffer[1] & 0x0F) << 8) + buffer[2];
+
         return 0U;
     }
     else
