@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "windows.h": "c"
-    }
+        "windows.h": "c",
+        "opencan_api.h": "c"
+    },
+    "python.linting.pylintEnabled": false
 }
