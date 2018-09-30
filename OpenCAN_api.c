@@ -75,9 +75,10 @@ uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
 
     if (result)
     {
-        if ((buffer[0] != RX_MSG_START_BYTE) && (buffer[RX_MSG_RAW_SIZE - 1] != RX_MSG_END_BYTE))
+        if ((buffer[0] != RX_MSG_START_BYTE) || (buffer[RX_MSG_RAW_SIZE - 1] != RX_MSG_END_BYTE))
         {
-            // TODO: Flush the serial buffer since message is wrong. We lost one here.
+            // Flush the serial buffer since message is wrong. We lost one here.
+            PurgeComm(hComm, PURGE_RXCLEAR | PURGE_RXABORT);
             return 1U;
         }
 
