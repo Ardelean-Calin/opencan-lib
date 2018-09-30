@@ -15,12 +15,12 @@ all: clean main.exe lib
 main.exe: main.c OpenCAN_api.c
 	$(CC) -o $@ main.c OpenCAN_api.c cobs.c -I. $(CFLAGS)
 
-OpenCAN_api.o: OpenCAN_api.c
+%.o: %.c
 	$(CC) -m32 -Wall -c $^
 
 # Generate the static library!
-lib: OpenCAN_api.c OpenCAN_api.o
-	$(LIB) /out:opencan.lib $(word 2,$^)
+lib: OpenCAN_api.c OpenCAN_api.o cobs.o
+	$(LIB) /out:opencan.lib $(word 2,$^) $(word 3,$^)
 
 clean:
 	rm -f *.exe
