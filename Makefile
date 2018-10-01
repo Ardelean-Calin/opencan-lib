@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := main.exe
 
 CC=gcc
-CFLAGS=
+CFLAGS= -std=c11
 LIB="C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\lib.exe"
 
 ifeq ($(DEBUG),1)
