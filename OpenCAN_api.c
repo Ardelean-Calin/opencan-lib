@@ -46,12 +46,16 @@ void *OpenCAN_Open(char *portName)
     // Set a 10ms timeout between bytes and make the read function blocking.
     // Will transmission work while waiting for receive? TODO
     // TODO: Maybe I also need a transmit timeout?
-    COMMTIMEOUTS commTimeouts;
-    GetCommTimeouts(hComm, &commTimeouts);
-    commTimeouts.ReadIntervalTimeout = 10;            // More than 10ms between bytes is a timeout
-    commTimeouts.ReadTotalTimeoutConstant = MAXDWORD; // Infinite wait time for message
-    commTimeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
-    SetCommTimeouts(hComm, &commTimeouts);
+    // COMMTIMEOUTS commTimeouts;
+    // GetCommTimeouts(hComm, &commTimeouts);
+    // commTimeouts.ReadIntervalTimeout = 10;            // More than 10ms between bytes is a timeout
+    // commTimeouts.ReadTotalTimeoutConstant = MAXDWORD; // Infinite wait time for message
+    // commTimeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
+    // SetCommTimeouts(hComm, &commTimeouts);
+
+    // Setup a communication event for receive.
+    if (!SetCommMask(hComm, EV_RXCHAR))
+        return NULL;
 
     if (hComm == INVALID_HANDLE_VALUE)
         return NULL;
@@ -81,6 +85,7 @@ void OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
 
     // Encode data using COBS
     StuffData(rawMsg, TX_MSG_DEC_SIZE, encodedMsg);
+    // Put the EOF as the last byte
     encodedMsg[TX_MSG_ENC_SIZE - 1] = 0x00;
 
     OpenCAN_Write(hComm, (uint8_t *)encodedMsg, TX_MSG_ENC_SIZE);
@@ -92,28 +97,46 @@ void OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
  */
 uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
 {
-    uint8_t ucReadResult = 0U;
-    uint8_t ucBufferIndex = 0U;
+    uint8_t ucBufferIndex;
+    uint8_t ucBytesRead;
     uint8_t pucCircularBuffer[RX_MSG_ENC_SIZE];
     uint8_t pucEncodedData[RX_MSG_ENC_SIZE];
     uint8_t pucDecodedData[RX_MSG_DEC_SIZE];
 
-    // Infinite loop: read bytes until EOF (0x00)
-    for (;;)
+    // Needed by WaitCommEvent to store the type of event received.
+    DWORD dwCommEvent;
+
+    // Variable initialization
+    ucBufferIndex = 0U;
+    ucBytesRead = 0U;
+    
+    // Block thread until a byte is received on the serial port.
+    if (WaitCommEvent(hComm, &dwCommEvent, NULL))
     {
-        ucReadResult = ReadFile(hComm, &pucCircularBuffer[ucBufferIndex], 1U, NULL, NULL);
-        if (!ucReadResult)
-            return 1U;
-
-        if (pucCircularBuffer[ucBufferIndex] == 0U)
+        // No error occured, we received a char!
+        // Start a do while loop which reads all bytes in the Receive Buffer
+        do
         {
-            // We got the EOF character; Decode COBS frame and build CAN frame
-            vExtractDataCircularBuffer(pucCircularBuffer, pucEncodedData, ucBufferIndex, RX_MSG_ENC_SIZE);
-            UnStuffData(pucEncodedData, RX_MSG_ENC_SIZE, pucDecodedData);
-            vBuildCANFrameFromData(pucDecodedData, rxMsg);
-            return 0U;
-        }
+            if (ReadFile(hComm, &pucCircularBuffer[ucBufferIndex], 1U, (LPDWORD) &ucBytesRead, NULL))
+            {
+                // The EOF byte is 0x00 - Read until it comes
+                if (pucCircularBuffer[ucBufferIndex] == 0x00U)
+                {
+                    vExtractDataCircularBuffer(pucCircularBuffer, pucEncodedData, ucBufferIndex, RX_MSG_ENC_SIZE);
+                    UnStuffData(pucEncodedData, RX_MSG_ENC_SIZE, pucDecodedData);
+                    vBuildCANFrameFromData(pucDecodedData, rxMsg);
+                    return 0U;
+                }
 
-        ucBufferIndex = (ucBufferIndex + 1) % RX_MSG_ENC_SIZE;
+                // Increment the ringbuffer index
+                ucBufferIndex = (ucBufferIndex + 1) % RX_MSG_ENC_SIZE;
+            }
+            else
+                // Some kind of read error
+                break;
+        } while (ucBytesRead);
     }
+
+    // We shouldn't get here. If we got here, error!
+    return 1U;
 }
