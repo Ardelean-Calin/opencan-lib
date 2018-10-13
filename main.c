@@ -5,28 +5,49 @@
 const char data[] = {0x41, 0x00, 0x43, 0x44, 0x00, 0x00, 0x47, 0x48};
 
 DWORD WINAPI ReadThreadFunction(LPVOID lpParam);
+DWORD WINAPI WriteThreadFunction(LPVOID lpParam);
 
 DWORD WINAPI ReadThreadFunction(LPVOID lpParam)
 {
-    uint32_t i = 0;
-    for (;;)
+    volatile HANDLE hCom = *(PHANDLE)lpParam;
+    printf("Entered read thread...\n");
+    CANMsg_Standard_t rxCanMsg = {0};
+    OpenCAN_ReadCAN(hCom, &rxCanMsg);
+    volatile DWORD test = GetLastError();
+    printf("Error: %d\n", test);
+
+    printf("Received message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
+
+    for (int i = 0; i < 8; i++)
     {
-        printf("Sunt in thread: %d\n", i);
-        Sleep(500);
-        i++;
+        printf("%02x ", rxCanMsg.Data[i]);
     }
+
+    printf("ThreadRead: Read completed...\n");
+}
+
+DWORD WINAPI WriteThreadFunction(LPVOID lpParam)
+{
+    HANDLE hCom = *(HANDLE *)lpParam;
+
+    CANMsg_Standard_t txCanMsg;
+    txCanMsg.msgID = 0x201;
+    txCanMsg.DLC = 8;
+    memcpy((void *)txCanMsg.Data, (void *)data, 8);
+    Sleep(1000);
+    OpenCAN_WriteCAN(hCom, &txCanMsg);
 }
 
 int main()
 {
-    CANMsg_Standard_t txCanMsg;
-    CANMsg_Standard_t rxCanMsg;
+    volatile CANMsg_Standard_t txCanMsg;
+    volatile CANMsg_Standard_t rxCanMsg;
 
     txCanMsg.msgID = 0x201;
     txCanMsg.DLC = 8;
     memcpy((void *)txCanMsg.Data, (void *)data, 8);
 
-    HANDLE hComm = OpenCAN_Open("COM7");
+    volatile HANDLE hComm = OpenCAN_Open("COM3");
 
     if (hComm == NULL)
     {
@@ -37,23 +58,33 @@ int main()
 
     PurgeComm(hComm, PURGE_RXCLEAR | PURGE_TXCLEAR | PURGE_RXABORT | PURGE_TXABORT);
 
-    OpenCAN_WriteCAN(hComm, &txCanMsg);
-    uint8_t error = OpenCAN_ReadCAN(hComm, &rxCanMsg);
+    HANDLE writeThreadHandle = CreateThread(NULL, 0, WriteThreadFunction, &hComm, 0, NULL);
+    HANDLE readThreadHandle = CreateThread(NULL, 0, ReadThreadFunction, &hComm, 0, NULL);
+    HANDLE handles[] = {readThreadHandle, writeThreadHandle};
+    WaitForMultipleObjects(2, handles, FALSE, INFINITE);
 
-    if (!error)
-    {
-        printf("Received message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
+    // Does it block?
+    // OpenCAN_WriteCAN(hComm, &txCanMsg);
+    // OpenCAN_ReadCAN(hComm, &rxCanMsg);
 
-        for (int i = 0; i < 8; i++)
-        {
-            printf("%02x ", rxCanMsg.Data[i]);
-        }
-    }
+    // OpenCAN_WriteCAN(hComm, &txCanMsg);
+    // uint8_t error = OpenCAN_ReadCAN(hComm, &rxCanMsg);
 
-    printf("\nClosing serial port\n");
-    CloseHandle(hComm); //Closing the Serial Port
-    // HANDLE threadHandle = CreateThread(NULL, 0, ReadThreadFunction, NULL, 0, NULL);
-    // WaitForSingleObject(threadHandle, INFINITE);
+    // if (!error)
+    // {
+    // printf("\nReceived message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
+    // for (int i = 0; i < 8; i++)
+    // {
+    //     printf("%02x ", rxCanMsg.Data[i]);
+    // }
+    // }
+
+    // printf("\nClosing serial port\n");
+    // CloseHandle(hComm); //Closing the Serial Port
+    // // WaitForSingleObject(threadHandle, INFINITE);
+    // WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    // Sleep(1000);
+    CloseHandle(hComm);
 
     return 0;
 }
