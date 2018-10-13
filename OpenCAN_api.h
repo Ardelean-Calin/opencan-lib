@@ -30,6 +30,6 @@ enum
  */
 void *OpenCAN_Open(char *portName);
 void OpenCAN_Close(HANDLE handle);
-uint8_t OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg);
-uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg);
+uint8_t OpenCAN_WriteCAN(HANDLE hSerialPort, CANMsg_Standard_t *txMsg);
+uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg);
 #endif

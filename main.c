@@ -9,21 +9,17 @@ DWORD WINAPI WriteThreadFunction(LPVOID lpParam);
 
 DWORD WINAPI ReadThreadFunction(LPVOID lpParam)
 {
-    volatile HANDLE hCom = *(PHANDLE)lpParam;
-    printf("Entered read thread...\n");
+    HANDLE hCom = *(PHANDLE)lpParam;
+
     CANMsg_Standard_t rxCanMsg = {0};
     OpenCAN_ReadCAN(hCom, &rxCanMsg);
-    volatile DWORD test = GetLastError();
-    printf("Error: %d\n", test);
 
     printf("Received message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
-
     for (int i = 0; i < 8; i++)
     {
         printf("%02x ", rxCanMsg.Data[i]);
     }
-
-    printf("ThreadRead: Read completed...\n");
+    printf("\n");
 }
 
 DWORD WINAPI WriteThreadFunction(LPVOID lpParam)
@@ -34,57 +30,34 @@ DWORD WINAPI WriteThreadFunction(LPVOID lpParam)
     txCanMsg.msgID = 0x201;
     txCanMsg.DLC = 8;
     memcpy((void *)txCanMsg.Data, (void *)data, 8);
-    Sleep(1000);
+
+    // Wait a bit for the Read Thread to start waiting
+    Sleep(100);
+
     OpenCAN_WriteCAN(hCom, &txCanMsg);
 }
 
 int main()
 {
-    volatile CANMsg_Standard_t txCanMsg;
-    volatile CANMsg_Standard_t rxCanMsg;
+    HANDLE hSerialPort = OpenCAN_Open("COM3");
 
-    txCanMsg.msgID = 0x201;
-    txCanMsg.DLC = 8;
-    memcpy((void *)txCanMsg.Data, (void *)data, 8);
-
-    volatile HANDLE hComm = OpenCAN_Open("COM3");
-
-    if (hComm == NULL)
+    if (hSerialPort == NULL)
     {
         printf("Error in opening serial port\n");
         return -1;
     }
     printf("Opening serial port successful\n");
 
-    PurgeComm(hComm, PURGE_RXCLEAR | PURGE_TXCLEAR | PURGE_RXABORT | PURGE_TXABORT);
+    // Delete any bytes still in the RX buffer
+    PurgeComm(hSerialPort, PURGE_RXCLEAR | PURGE_TXCLEAR | PURGE_RXABORT | PURGE_TXABORT);
 
-    HANDLE writeThreadHandle = CreateThread(NULL, 0, WriteThreadFunction, &hComm, 0, NULL);
-    HANDLE readThreadHandle = CreateThread(NULL, 0, ReadThreadFunction, &hComm, 0, NULL);
+    HANDLE writeThreadHandle = CreateThread(NULL, 1000, WriteThreadFunction, &hSerialPort, 0, NULL);
+    HANDLE readThreadHandle = CreateThread(NULL, 1000, ReadThreadFunction, &hSerialPort, 0, NULL);
     HANDLE handles[] = {readThreadHandle, writeThreadHandle};
-    WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    WaitForMultipleObjects(2, handles, TRUE, 1000);
 
-    // Does it block?
-    // OpenCAN_WriteCAN(hComm, &txCanMsg);
-    // OpenCAN_ReadCAN(hComm, &rxCanMsg);
+    printf("Closing serial connection\n");
 
-    // OpenCAN_WriteCAN(hComm, &txCanMsg);
-    // uint8_t error = OpenCAN_ReadCAN(hComm, &rxCanMsg);
-
-    // if (!error)
-    // {
-    // printf("\nReceived message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
-    // for (int i = 0; i < 8; i++)
-    // {
-    //     printf("%02x ", rxCanMsg.Data[i]);
-    // }
-    // }
-
-    // printf("\nClosing serial port\n");
-    // CloseHandle(hComm); //Closing the Serial Port
-    // // WaitForSingleObject(threadHandle, INFINITE);
-    // WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-    // Sleep(1000);
-    CloseHandle(hComm);
-
+    OpenCAN_Close(hSerialPort);
     return 0;
 }

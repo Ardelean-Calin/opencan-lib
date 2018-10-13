@@ -7,17 +7,17 @@
 // Function prototypes
 static void vExtractDataCircularBuffer(uint8_t *src, uint8_t *dst, uint8_t i, uint8_t len);
 static void vBuildCANFrameFromData(uint8_t *data, CANMsg_Standard_t *msg);
-static uint8_t ucWriteToFile(HANDLE hComm, uint8_t *Buf, uint8_t Len);
-static uint8_t ucReadFromFile(HANDLE hComm, uint8_t *pucDest, uint8_t ucBytesToRead);
+static uint8_t ucWriteToFile(HANDLE hSerialPort, uint8_t *Buf, uint8_t Len);
+static uint8_t ucReadFromFile(HANDLE hSerialPort, uint8_t *pucDest, uint8_t ucBytesToRead);
 void vSerializeMessage(CANMsg_Standard_t *src, uint8_t *dest);
 void *OpenCAN_Open(char *portName);
-void OpenCAN_Close(HANDLE hComm);
+void OpenCAN_Close(HANDLE hSerialPort);
 // Global variables
 
 void *OpenCAN_Open(char *portName)
 {
-    HANDLE hComm;
-    hComm = CreateFile(portName,                     //port name
+    HANDLE hSerialPort;
+    hSerialPort = CreateFile(portName,                     //port name
                        GENERIC_READ | GENERIC_WRITE, //Read/Write
                        0,                            // No Sharing
                        0,                            // No Security
@@ -25,32 +25,35 @@ void *OpenCAN_Open(char *portName)
                        FILE_FLAG_OVERLAPPED,         // Overlapped I/O
                        NULL);                        // Null for Comm Devices
 
-    COMMTIMEOUTS commTimeouts;
-    GetCommTimeouts(hComm, &commTimeouts);
-    commTimeouts.ReadIntervalTimeout = MAXDWORD;
-    commTimeouts.ReadTotalTimeoutConstant = MAXDWORD;
-    commTimeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
-    SetCommTimeouts(hComm, &commTimeouts);
+    // Set baudrate. VERY important for Read, even though we don't
+    // need to specify it on the uC
+    DCB dcb;
+    GetCommState(hSerialPort, &dcb);
+    dcb.BaudRate = CBR_256000;
+    dcb.ByteSize = 8;
+    dcb.Parity = NOPARITY;
+    dcb.StopBits = ONESTOPBIT;
+    SetCommState(hSerialPort, &dcb);
 
     // Receive events on byte receive
-    if (!SetCommMask(hComm, EV_RXCHAR))
+    if (!SetCommMask(hSerialPort, EV_RXCHAR))
         return NULL;
 
-    if (hComm == INVALID_HANDLE_VALUE)
+    if (hSerialPort == INVALID_HANDLE_VALUE)
         return NULL;
     else
-        return hComm;
+        return hSerialPort;
 }
 
-void OpenCAN_Close(HANDLE hComm)
+void OpenCAN_Close(HANDLE hSerialPort)
 {
-    CloseHandle(hComm);
+    CloseHandle(hSerialPort);
 }
 
 /**
  * Blocks until we send a CAN Message.
  */
-uint8_t OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
+uint8_t OpenCAN_WriteCAN(HANDLE hSerialPort, CANMsg_Standard_t *txMsg)
 {
     uint8_t rawMsg[TX_MSG_DEC_SIZE];
     uint8_t encodedMsg[TX_MSG_ENC_SIZE];
@@ -65,7 +68,7 @@ uint8_t OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
 
     // Send the data off to be written when time allows it. ucWriteToFile blocks
     // until data was sent or until timeout.
-    bytesWritten = ucWriteToFile(hComm, (uint8_t *)encodedMsg, TX_MSG_ENC_SIZE);
+    bytesWritten = ucWriteToFile(hSerialPort, (uint8_t *)encodedMsg, TX_MSG_ENC_SIZE);
     if (!bytesWritten)
         return 1U;
     else
@@ -75,7 +78,7 @@ uint8_t OpenCAN_WriteCAN(HANDLE hComm, CANMsg_Standard_t *txMsg)
 /**
  * Blocks until we receive a correctly formatted RX Message.
  */
-uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
+uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg)
 {
     uint8_t ucBufferIndex;
     uint8_t ucBytesRead;
@@ -84,6 +87,9 @@ uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
     uint8_t pucEncodedData[RX_MSG_ENC_SIZE];
     uint8_t pucDecodedData[RX_MSG_DEC_SIZE];
 
+    // Specifies wether the read was complete or not
+    uint8_t msgReadComplete = FALSE;
+
     // We initialize these variables
     ucBufferIndex = 0U;
     ucBytesRead = 0U;
@@ -91,7 +97,7 @@ uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
 
     do
     {
-        ucBytesRead = ucReadFromFile(hComm, &pucCircularBuffer[ucBufferIndex], 1U);
+        ucBytesRead = ucReadFromFile(hSerialPort, &pucCircularBuffer[ucBufferIndex], 1U);
         ucBytesReadTotal += ucBytesRead;
         if (ucBytesRead)
         {
@@ -101,14 +107,14 @@ uint8_t OpenCAN_ReadCAN(HANDLE hComm, CANMsg_Standard_t *rxMsg)
                 vExtractDataCircularBuffer(pucCircularBuffer, pucEncodedData, ucBufferIndex, RX_MSG_ENC_SIZE);
                 UnStuffData(pucEncodedData, RX_MSG_ENC_SIZE, pucDecodedData);
                 vBuildCANFrameFromData(pucDecodedData, rxMsg);
-                break;
+                msgReadComplete = TRUE;
             }
 
             // Increment the ringbuffer index
             ucBufferIndex = (ucBufferIndex + 1) % RX_MSG_ENC_SIZE;
         }
 
-    } while (1);
+    } while (!msgReadComplete);
 
     // Return the number of bytes read in total
     return ucBytesReadTotal;
@@ -128,7 +134,7 @@ void vSerializeMessage(CANMsg_Standard_t *src, uint8_t *dest)
 }
 
 // Returns the number of bytes written
-static uint8_t ucWriteToFile(HANDLE hComm, uint8_t *Buf, uint8_t Len)
+static uint8_t ucWriteToFile(HANDLE hSerialPort, uint8_t *Buf, uint8_t Len)
 {
     DWORD bytesWritten;
     DWORD dwRes;
@@ -139,7 +145,7 @@ static uint8_t ucWriteToFile(HANDLE hComm, uint8_t *Buf, uint8_t Len)
         // error creating osWrite event handle
         return 0U;
 
-    if (!WriteFile(hComm, (void *)Buf, (DWORD)Len, &bytesWritten, &osWrite))
+    if (!WriteFile(hSerialPort, (void *)Buf, (DWORD)Len, &bytesWritten, &osWrite))
     {
         // Error while writing file.
         if (GetLastError() != ERROR_IO_PENDING)
@@ -153,7 +159,7 @@ static uint8_t ucWriteToFile(HANDLE hComm, uint8_t *Buf, uint8_t Len)
             switch (dwRes)
             {
             case WAIT_OBJECT_0:
-                if (!GetOverlappedResult(hComm, &osWrite, (LPDWORD)&bytesWritten, FALSE))
+                if (!GetOverlappedResult(hSerialPort, &osWrite, (LPDWORD)&bytesWritten, FALSE))
                 {
                     // Error transfering
                     bytesWritten = 0U;
@@ -170,8 +176,9 @@ static uint8_t ucWriteToFile(HANDLE hComm, uint8_t *Buf, uint8_t Len)
     return (uint8_t)bytesWritten;
 }
 
-static uint8_t ucReadFromFile(HANDLE hComm, uint8_t *pucDest, uint8_t ucBytesToRead)
+static uint8_t ucReadFromFile(HANDLE hSerialPort, uint8_t *pucDest, uint8_t ucBytesToRead)
 {
+    // TODO: Can we simplify this?
     DWORD bytesRead = 0U;
     BOOL fWaitingOnRead = FALSE;
 
@@ -185,7 +192,7 @@ static uint8_t ucReadFromFile(HANDLE hComm, uint8_t *pucDest, uint8_t ucBytesToR
     if (!fWaitingOnRead)
     {
         // Issue read operation.
-        if (!ReadFile(hComm, pucDest, ucBytesToRead, &bytesRead, &osReader))
+        if (!ReadFile(hSerialPort, pucDest, ucBytesToRead, &bytesRead, &osReader))
         {
             if (GetLastError() != ERROR_IO_PENDING) // read not delayed?
                 // Error in communications; report it.
@@ -201,6 +208,7 @@ static uint8_t ucReadFromFile(HANDLE hComm, uint8_t *pucDest, uint8_t ucBytesToR
         }
     }
 
+    // Stores result of the wait for event
     DWORD dwRes;
 
     if (fWaitingOnRead)
@@ -210,7 +218,7 @@ static uint8_t ucReadFromFile(HANDLE hComm, uint8_t *pucDest, uint8_t ucBytesToR
         {
         // Read completed.
         case WAIT_OBJECT_0:
-            if (!GetOverlappedResult(hComm, &osReader, &bytesRead, FALSE))
+            if (!GetOverlappedResult(hSerialPort, &osReader, &bytesRead, FALSE))
                 // Error in communications; report it.
                 return 0U;
             else
@@ -223,19 +231,7 @@ static uint8_t ucReadFromFile(HANDLE hComm, uint8_t *pucDest, uint8_t ucBytesToR
             //  Reset flag so that another opertion can be issued.
             fWaitingOnRead = FALSE;
             break;
-
-        case WAIT_TIMEOUT:
-            // Operation isn't complete yet. fWaitingOnRead flag isn't
-            // changed since I'll loop back around, and I don't want
-            // to issue another read until the first one finishes.
-            //
-            // This is a good time to do some background work.
-            break;
-
         default:
-            // Error in the WaitForSingleObject; abort.
-            // This indicates a problem with the OVERLAPPED structure's
-            // event handle.
             break;
         }
     }
