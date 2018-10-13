@@ -25,11 +25,18 @@ enum
     CAN_CHANGE_BAUDRATE
 };
 
-/*
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+    /*
  * Function prototypes 
  */
-void *OpenCAN_Open(char *portName);
-void OpenCAN_Close(HANDLE handle);
-uint8_t OpenCAN_WriteCAN(HANDLE hSerialPort, CANMsg_Standard_t *txMsg);
-uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg);
+    void *OpenCAN_Open(char *portName);
+    void OpenCAN_Close(HANDLE handle);
+    uint8_t OpenCAN_WriteCAN(HANDLE hSerialPort, CANMsg_Standard_t *txMsg);
+    uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg);
+#ifdef __cplusplus
+}
+#endif
 #endif
