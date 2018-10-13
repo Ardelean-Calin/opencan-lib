@@ -3,5 +3,7 @@
         "windows.h": "c",
         "opencan_api.h": "c"
     },
-    "python.linting.pylintEnabled": false
+    "python.linting.pylintEnabled": false,
+    "workbench.settings.editor": "json",
+    "editor.formatOnSave": true
 }
