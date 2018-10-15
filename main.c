@@ -14,7 +14,7 @@ DWORD WINAPI ReadThreadFunction(LPVOID lpParam)
     CANMsg_Standard_t rxCanMsg = {0};
     OpenCAN_ReadCAN(hCom, &rxCanMsg);
 
-    printf("Received message:\n  ID: %x; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.DLC);
+    printf("Received message:\n  ID: %x; Extended: %d; DLC: %d; Data: ", rxCanMsg.msgID, rxCanMsg.isExtended, rxCanMsg.DLC);
     for (int i = 0; i < 8; i++)
     {
         printf("%02x ", rxCanMsg.Data[i]);
@@ -26,7 +26,7 @@ DWORD WINAPI WriteThreadFunction(LPVOID lpParam)
 {
     HANDLE hCom = *(HANDLE *)lpParam;
 
-    CANMsg_Standard_t txCanMsg;
+    CANMsg_Standard_t txCanMsg = {0};
     txCanMsg.msgID = 0x201;
     txCanMsg.DLC = 8;
     memcpy((void *)txCanMsg.Data, (void *)data, 8);

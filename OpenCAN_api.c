@@ -18,12 +18,12 @@ void *OpenCAN_Open(char *portName)
 {
     HANDLE hSerialPort;
     hSerialPort = CreateFile(portName,                     //port name
-                       GENERIC_READ | GENERIC_WRITE, //Read/Write
-                       0,                            // No Sharing
-                       0,                            // No Security
-                       OPEN_EXISTING,                // Open existing port only
-                       FILE_FLAG_OVERLAPPED,         // Overlapped I/O
-                       NULL);                        // Null for Comm Devices
+                             GENERIC_READ | GENERIC_WRITE, //Read/Write
+                             0,                            // No Sharing
+                             0,                            // No Security
+                             OPEN_EXISTING,                // Open existing port only
+                             FILE_FLAG_OVERLAPPED,         // Overlapped I/O
+                             NULL);                        // Null for Comm Devices
 
     // Set baudrate. VERY important for Read, even though we don't
     // need to specify it on the uC
@@ -55,20 +55,20 @@ void OpenCAN_Close(HANDLE hSerialPort)
  */
 uint8_t OpenCAN_WriteCAN(HANDLE hSerialPort, CANMsg_Standard_t *txMsg)
 {
-    uint8_t rawMsg[TX_MSG_DEC_SIZE];
-    uint8_t encodedMsg[TX_MSG_ENC_SIZE];
+    uint8_t rawMsg[USB_DEC_PACKET_SIZE];
+    uint8_t encodedMsg[USB_ENC_PACKET_SIZE];
     uint8_t bytesWritten;
 
     // Transform our message structure into a byte array
     vSerializeMessage(txMsg, &rawMsg[0]);
     // Encode data using COBS
-    StuffData(rawMsg, TX_MSG_DEC_SIZE, encodedMsg);
+    StuffData(rawMsg, USB_DEC_PACKET_SIZE, encodedMsg);
     // Put the EOF as the last byte
-    encodedMsg[TX_MSG_ENC_SIZE - 1] = 0x00;
+    encodedMsg[USB_ENC_PACKET_SIZE - 1] = 0x00;
 
     // Send the data off to be written when time allows it. ucWriteToFile blocks
     // until data was sent or until timeout.
-    bytesWritten = ucWriteToFile(hSerialPort, (uint8_t *)encodedMsg, TX_MSG_ENC_SIZE);
+    bytesWritten = ucWriteToFile(hSerialPort, (uint8_t *)encodedMsg, USB_ENC_PACKET_SIZE);
     if (!bytesWritten)
         return 1U;
     else
@@ -83,9 +83,9 @@ uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg)
     uint8_t ucBufferIndex;
     uint8_t ucBytesRead;
     uint8_t ucBytesReadTotal;
-    uint8_t pucCircularBuffer[RX_MSG_ENC_SIZE];
-    uint8_t pucEncodedData[RX_MSG_ENC_SIZE];
-    uint8_t pucDecodedData[RX_MSG_DEC_SIZE];
+    uint8_t pucCircularBuffer[USB_ENC_PACKET_SIZE];
+    uint8_t pucEncodedData[USB_ENC_PACKET_SIZE];
+    uint8_t pucDecodedData[USB_DEC_PACKET_SIZE];
 
     // Specifies wether the read was complete or not
     uint8_t msgReadComplete = FALSE;
@@ -104,14 +104,17 @@ uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg)
             // The EOF byte is 0x00 - Read until it comes
             if (pucCircularBuffer[ucBufferIndex] == 0x00U)
             {
-                vExtractDataCircularBuffer(pucCircularBuffer, pucEncodedData, ucBufferIndex, RX_MSG_ENC_SIZE);
-                UnStuffData(pucEncodedData, RX_MSG_ENC_SIZE, pucDecodedData);
-                vBuildCANFrameFromData(pucDecodedData, rxMsg);
-                msgReadComplete = TRUE;
+                vExtractDataCircularBuffer(pucCircularBuffer, pucEncodedData, ucBufferIndex, USB_ENC_PACKET_SIZE);
+                UnStuffData(pucEncodedData, USB_ENC_PACKET_SIZE, pucDecodedData);
+                if (pucDecodedData[0] == RX_CAN_RECV)
+                {
+                    vBuildCANFrameFromData(pucDecodedData, rxMsg);
+                    msgReadComplete = TRUE;
+                }
             }
 
             // Increment the ringbuffer index
-            ucBufferIndex = (ucBufferIndex + 1) % RX_MSG_ENC_SIZE;
+            ucBufferIndex = (ucBufferIndex + 1) % USB_ENC_PACKET_SIZE;
         }
 
     } while (!msgReadComplete);
@@ -123,14 +126,15 @@ uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg)
 void vSerializeMessage(CANMsg_Standard_t *src, uint8_t *dest)
 {
     // Command to execute on the OpenCAN
-    dest[0] = CAN_WRITE_MSG;
-    // TODO: Change DLC and MSGID to be same format as receive
-    // Address upper byte
-    dest[1] = src->msgID >> 4;
-    // Address lower 3 bits and DLC
-    dest[2] = ((src->msgID & 0b00000001111) << 4) + src->DLC;
+    dest[0] = TX_CAN_SEND;
+    dest[1] = src->isExtended;
+    dest[2] = (src->msgID & 0xFF000000) >> 24;
+    dest[3] = (src->msgID & 0x00FF0000) >> 16;
+    dest[4] = (src->msgID & 0x0000FF00) >> 8;
+    dest[5] = (src->msgID & 0x000000FF);
+    dest[6] = src->DLC;
     // Copy data buffer in preparation for send
-    memcpy((void *)&dest[3], src->Data, 8);
+    memcpy((void *)&dest[7], src->Data, 8);
 }
 
 // Returns the number of bytes written
@@ -253,7 +257,8 @@ static void vExtractDataCircularBuffer(uint8_t *src, uint8_t *dst, uint8_t i, ui
 static void vBuildCANFrameFromData(uint8_t *data, CANMsg_Standard_t *msg)
 {
     // Create the CAN message from the received data
-    memcpy(msg->Data, &data[2], 8U);
-    msg->DLC = data[0] >> 4;
-    msg->msgID = ((data[0] & 0x0F) << 8) + data[1];
+    msg->isExtended = data[1];
+    msg->msgID = (data[2] << 24) + (data[3] << 16) + (data[4] << 8) + data[5];
+    msg->DLC = data[6];
+    memcpy(msg->Data, &data[7], 8U);
 }
