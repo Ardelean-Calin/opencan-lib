@@ -39,14 +39,16 @@ DWORD WINAPI WriteThreadFunction(LPVOID lpParam)
 
 int main()
 {
-    HANDLE hSerialPort = OpenCAN_Open("COM3");
+    HANDLE hSerialPort;
+    uint8_t comNumber;
+    uint8_t error = OpenCAN_Open(&hSerialPort, &comNumber);
 
-    if (hSerialPort == NULL)
+    if (error)
     {
         printf("Error in opening serial port\n");
         return -1;
     }
-    printf("Opening serial port successful\n");
+    printf("Opening serial port successful: COM%d\n", comNumber);
 
     // Delete any bytes still in the RX buffer
     PurgeComm(hSerialPort, PURGE_RXCLEAR | PURGE_TXCLEAR | PURGE_RXABORT | PURGE_TXABORT);
