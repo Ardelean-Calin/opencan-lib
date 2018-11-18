@@ -1,8 +1,13 @@
-.DEFAULT_GOAL := main.exe
+.DEFAULT_GOAL := all
+
+BUILD_DIR := build
 
 CC=gcc
-CFLAGS= -std=c11
+CFLAGS= -std=c11 -Iinclude
 LIB="C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\lib.exe"
+
+SRC=src
+OBJ=$(BUILD_DIR)
 
 ifeq ($(DEBUG),1)
 	CFLAGS += -g -Og
@@ -10,19 +15,22 @@ else
 	CFLAGS += -O0
 endif
 
+SOURCES := $(wildcard $(SRC)/*.c)
+OBJECTS := $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SOURCES))
+
 all: clean main.exe lib
 
-main.exe: main.c OpenCAN_api.c opencan_utils.c
-	$(CC) -o $@ main.c OpenCAN_api.c cobs.c opencan_utils.c -I. $(CFLAGS)
+main.exe: $(OBJECTS)
+	$(CC) -o $@ main.c $^ $(CFLAGS)
 
-%.o: %.c
-	$(CC) -m32 -Wall -c $^
+$(OBJ)/%.o: $(SRC)/%.c
+	$(CC) -Wall -c $< -o $@ $(CFLAGS)
 
 # Generate the static library!
-lib: OpenCAN_api.c OpenCAN_api.o cobs.o opencan_utils.o
-	$(LIB) /out:opencan.lib $(word 2,$^) $(word 3,$^)
+lib: $(OBJECTS)
+	$(LIB) /out:opencan.lib $^
 
 clean:
 	rm -f *.exe
-	rm -f *.o
 	rm -f *.lib
+	rm -f build/*
