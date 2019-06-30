@@ -61,3 +61,29 @@ uint8_t OpenCAN_ReadCAN(HANDLE hSerialPort, CANMsg_Standard_t *rxMsg)
     // Return the number of bytes read in total
     return ucBytesReadTotal;
 }
+
+/**
+ * Blocks until we change device baudrate.
+ */
+uint8_t OpenCAN_SetBaudrate(HANDLE hSerialPort, uint8_t ucBaudSelector)
+{
+    uint8_t rawMsg[USB_DEC_PACKET_SIZE];
+    uint8_t encodedMsg[USB_ENC_PACKET_SIZE];
+    uint8_t bytesWritten;
+
+    // These two bytes indicate the baudrate change command
+    rawMsg[0] = TX_CAN_SET_BAUDRATE;
+    rawMsg[1] = ucBaudSelector;
+    // Encode data using COBS
+    StuffData(rawMsg, USB_DEC_PACKET_SIZE, encodedMsg);
+    // Put the EOF as the last byte
+    encodedMsg[USB_ENC_PACKET_SIZE - 1] = 0x00;
+
+    // Send the data off to be written when time allows it. ucWriteBytesToSerial blocks
+    // until data was sent or until timeout.
+    bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedMsg, USB_ENC_PACKET_SIZE);
+    if (!bytesWritten)
+        return 1U;
+    else
+        return 0U;
+}

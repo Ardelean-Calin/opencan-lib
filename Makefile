@@ -3,7 +3,7 @@
 BUILD_DIR := build
 
 CC=gcc
-CFLAGS= -std=c11 -Iinclude -m32
+CFLAGS= -std=c11 -Iinclude
 LIB="C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\lib.exe"
 
 SRC=src

@@ -33,7 +33,7 @@ DWORD WINAPI WriteThreadFunction(LPVOID lpParam)
 
     // Wait a bit for the Read Thread to start waiting
     Sleep(100);
-
+    OpenCAN_SetBaudrate(hCom, CAN_BAUDRATE_100K);
     OpenCAN_WriteCAN(hCom, &txCanMsg);
 }
 
