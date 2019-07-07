@@ -46,5 +46,5 @@ $(OBJ)/%.o: $(SRC)/%.c
 
 clean:
 	rm -f *.exe
-	rm -f *.lib
+	rm -f *.a
 	rm -f build/*
