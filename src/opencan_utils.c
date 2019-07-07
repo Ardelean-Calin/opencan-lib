@@ -110,8 +110,8 @@ uint8_t vPingPort(HANDLE hSerialPort)
     return 0U;
   else
   {
-    // Blocks until we read a valid frame from the COM port or until timeout (100ms)
-    uint8_t noBytesRead = ucReadFrameFromSerial(hSerialPort, (uint8_t *)&rawRxMsg, 100U);
+    // Blocks until we read a valid frame from the COM port or until timeout (5ms)
+    uint8_t noBytesRead = ucReadFrameFromSerial(hSerialPort, (uint8_t *)&rawRxMsg, 5U);
     // Check if the received bytes contain a valid acknowledge message. In the future
     // could be the version
     if (noBytesRead && memcmp(&rawRxMsg + 1, "Ardelean Calin", 14))
