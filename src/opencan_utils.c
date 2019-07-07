@@ -25,6 +25,8 @@ uint8_t ucScanPort(HANDLE *hSerialPort, uint8_t *pucCOMNumber)
     // need to specify it on the uC
     DCB dcb;
     GetCommState(*hSerialPort, &dcb);
+    // A baudrate needs to be specified, however it is not used, but passed as a parameter
+    // via USB CDC.
     dcb.BaudRate = CBR_256000;
     dcb.ByteSize = 8;
     dcb.Parity = NOPARITY;
