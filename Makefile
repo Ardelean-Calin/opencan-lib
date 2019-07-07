@@ -2,9 +2,17 @@
 
 BUILD_DIR := build
 
-CC=gcc
+# Compiler
+CC=i686-w64-mingw32-gcc
 CFLAGS= -std=c11 -Iinclude
-LIB="C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\lib.exe"
+
+# Linker
+LIB=i686-w64-mingw32-ar
+LIBFLAGS=rcs
+LIBFILE=libopencan.a
+
+# User defined functions
+MKDIR_P = mkdir -p
 
 SRC=src
 OBJ=$(BUILD_DIR)
@@ -18,17 +26,23 @@ endif
 SOURCES := $(wildcard $(SRC)/*.c)
 OBJECTS := $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SOURCES))
 
-all: clean main.exe lib
+all: clean directories main.exe
 
-main.exe: $(OBJECTS)
-	$(CC) -o $@ main.c $^ $(CFLAGS)
+directories: $(BUILD_DIR)
+$(BUILD_DIR):
+	$(MKDIR_P) $(BUILD_DIR)
 
-$(OBJ)/%.o: $(SRC)/%.c
-	$(CC) -Wall -c $< -o $@ $(CFLAGS)
+# Generate an executable which uses our static library
+main.exe: lib
+	$(CC) -o $@ main.c $(LIBFILE) $(CFLAGS)
 
 # Generate the static library!
 lib: $(OBJECTS)
-	$(LIB) /out:opencan.lib $^
+	$(LIB) $(LIBFLAGS) $(LIBFILE) $^
+
+# Generic object compiler
+$(OBJ)/%.o: $(SRC)/%.c
+	$(CC) -Wall -c $< -o $@ $(CFLAGS)
 
 clean:
 	rm -f *.exe

@@ -1,7 +1,7 @@
 #ifndef OPEN_CAN_
 #define OPEN_CAN_
 
-#include <Windows.h>
+#include <windows.h>
 #include <stdint.h>
 #include <stddef.h>
 

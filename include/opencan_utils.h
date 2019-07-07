@@ -2,7 +2,7 @@
 #define OPENCAN_UTILS_H__
 
 #include <stdint.h>
-#include <Windows.h>
+#include <windows.h>
 // User-defined includes
 #include "OpenCAN_api.h"
 
