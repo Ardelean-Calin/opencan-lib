@@ -47,6 +47,8 @@ uint8_t ucScanPort(HANDLE *hSerialPort, uint8_t *pucCOMNumber)
       *pucCOMNumber = i;
       return 0U;
     }
+    // Close the COM port if not working
+    CloseHandle(hSerialPort);
   }
 
   // No OpenCAN found
@@ -56,7 +58,7 @@ uint8_t ucScanPort(HANDLE *hSerialPort, uint8_t *pucCOMNumber)
 /*
 * Waits for (with timeout) and reads a COBS encoded Frame from the given Serial Port
 */
-uint8_t ucReadFrameFromSerial(HANDLE hSerialPort, uint8_t *pucDecodedData, uint32_t ucTimeout)
+uint8_t ucReadFrameFromSerial(HANDLE hSerialPort, uint8_t *pucDecodedData, uint32_t ulTimout)
 {
   uint8_t ucBufferIndex = 0U;
   uint8_t ucBytesRead = 0U;
@@ -68,7 +70,7 @@ uint8_t ucReadFrameFromSerial(HANDLE hSerialPort, uint8_t *pucDecodedData, uint3
   uint8_t msgReadComplete = FALSE;
   do
   {
-    ucBytesRead = ucReadBytesFromSerial(hSerialPort, &pucCircularBuffer[ucBufferIndex], 1U, ucTimeout, &msgReadComplete);
+    ucBytesRead = ucReadBytesFromSerial(hSerialPort, &pucCircularBuffer[ucBufferIndex], 1U, ulTimout, &msgReadComplete);
     ucBytesReadTotal += ucBytesRead;
     if (ucBytesRead)
     {
@@ -105,7 +107,7 @@ uint8_t vPingPort(HANDLE hSerialPort)
 
   // Send the data off to be written when time allows it. ucWriteBytesToSerial blocks
   // until data was sent or until timeout.
-  bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedTxMsg, USB_ENC_PACKET_SIZE);
+  bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedTxMsg, USB_ENC_PACKET_SIZE, 5U);
   if (!bytesWritten)
     return 0U;
   else
@@ -114,7 +116,7 @@ uint8_t vPingPort(HANDLE hSerialPort)
     uint8_t noBytesRead = ucReadFrameFromSerial(hSerialPort, (uint8_t *)&rawRxMsg, 5U);
     // Check if the received bytes contain a valid acknowledge message. In the future
     // could be the version
-    if (noBytesRead && memcmp(&rawRxMsg + 1, "Ardelean Calin", 14))
+    if ((noBytesRead) && !(memcmp(rawRxMsg + 1, "Ardelean Calin", 14)))
       return 1U;
     return 0U;
   }
@@ -135,7 +137,7 @@ void vSerializeMessage(CANMsg_Standard_t *src, uint8_t *dest)
 }
 
 // Returns the number of bytes written
-uint8_t ucWriteBytesToSerial(HANDLE hSerialPort, uint8_t *Buf, uint8_t Len)
+uint8_t ucWriteBytesToSerial(HANDLE hSerialPort, uint8_t *Buf, uint8_t Len, uint32_t ulTimeout)
 {
   DWORD bytesWritten;
   DWORD dwRes;
@@ -155,8 +157,8 @@ uint8_t ucWriteBytesToSerial(HANDLE hSerialPort, uint8_t *Buf, uint8_t Len)
     }
     else
     {
-      // Write is pending, so wait for it indefinitely (?)
-      dwRes = WaitForSingleObject(osWrite.hEvent, INFINITE);
+      // Write is pending, so wait for it until specified timout
+      dwRes = WaitForSingleObject(osWrite.hEvent, ulTimeout);
       switch (dwRes)
       {
       case WAIT_OBJECT_0:
@@ -177,7 +179,7 @@ uint8_t ucWriteBytesToSerial(HANDLE hSerialPort, uint8_t *Buf, uint8_t Len)
   return (uint8_t)bytesWritten;
 }
 
-uint8_t ucReadBytesFromSerial(HANDLE hSerialPort, uint8_t *pucDest, uint8_t ucBytesToRead, uint32_t ucTimeout, uint8_t *msgReadComplete)
+uint8_t ucReadBytesFromSerial(HANDLE hSerialPort, uint8_t *pucDest, uint8_t ucBytesToRead, uint32_t ulTimout, uint8_t *msgReadComplete)
 {
   // TODO: Can we simplify this?
   DWORD bytesRead = 0U;
@@ -214,7 +216,7 @@ uint8_t ucReadBytesFromSerial(HANDLE hSerialPort, uint8_t *pucDest, uint8_t ucBy
 
   if (fWaitingOnRead)
   {
-    dwRes = WaitForSingleObject(osReader.hEvent, ucTimeout);
+    dwRes = WaitForSingleObject(osReader.hEvent, ulTimout);
     switch (dwRes)
     {
     // Read completed.

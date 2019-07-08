@@ -40,7 +40,7 @@ uint8_t OpenCAN_WriteCAN(HANDLE hSerialPort, CANMsg_Standard_t *txMsg)
 
     // Send the data off to be written when time allows it. ucWriteBytesToSerial blocks
     // until data was sent or until timeout.
-    bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedMsg, USB_ENC_PACKET_SIZE);
+    bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedMsg, USB_ENC_PACKET_SIZE, 5U);
     if (!bytesWritten)
         return 1U;
     else
@@ -81,7 +81,7 @@ uint8_t OpenCAN_SetBaudrate(HANDLE hSerialPort, uint8_t ucBaudSelector)
 
     // Send the data off to be written when time allows it. ucWriteBytesToSerial blocks
     // until data was sent or until timeout.
-    bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedMsg, USB_ENC_PACKET_SIZE);
+    bytesWritten = ucWriteBytesToSerial(hSerialPort, (uint8_t *)encodedMsg, USB_ENC_PACKET_SIZE, 5U);
     if (!bytesWritten)
         return 1U;
     else
