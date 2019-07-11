@@ -19,7 +19,7 @@ typedef struct
     uint8_t Data[8];
 } CANMsg_Standard_t;
 
-enum
+enum AVAILABLE_COMMANDS
 {
     TX_CAN_SEND = 0,
     RX_CAN_RECV,
@@ -29,7 +29,7 @@ enum
 };
 
 // Supported baudrates by device
-enum
+enum CAN_SPEEDS
 {
     CAN_BAUDRATE_1000K = 0,
     CAN_BAUDRATE_800K,
