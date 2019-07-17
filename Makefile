@@ -36,6 +36,9 @@ $(BUILD_DIR):
 main.exe: lib
 	$(CC) -o $@ main.c $(LIBFILE) $(CFLAGS)
 
+stress: lib
+	$(CC) -o $@.exe stress_test.c $(LIBFILE) $(CFLAGS)
+
 # Generate the static library!
 lib: $(OBJECTS)
 	$(LIB) $(LIBFLAGS) $(LIBFILE) $^
